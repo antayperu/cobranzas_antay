@@ -103,10 +103,8 @@ def process_data(df_ctas, df_cartera, df_cobranza):
             return str(val).zfill(8)
 
     def build_comprobante(row):
-        doc_ref = row.get("Documento Referencia", "")
-        if pd.notna(doc_ref) and str(doc_ref).strip() != "":
-            return str(doc_ref).strip()
-        
+        # Regla: sersun + "-" + numsun (padding 8)
+        # Se ignora "Documento Referencia" del excel para automatizar desde ERP
         sersun = str(row.get("sersun", "")).strip()
         numsun = clean_numsun(row.get("numsun", ""))
         return f"{sersun}-{numsun}"

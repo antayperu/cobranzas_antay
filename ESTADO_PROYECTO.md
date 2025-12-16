@@ -39,7 +39,8 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
 - **Estado Actual**: 
     - **v1.0**: Terminada y funcional.
     - **v1.1**: Se implementó lógica de "Saldo Real" y Multiselección.
-    - **v1.2 (Actual)**: Optimización de Fuente de Datos ("Importe Referencial" directo de ERP) para eliminar manipulación manual de Excel.
+    - **v1.2**: Optimización de Fuente de Datos ("Importe Referencial" directo).
+    - **v1.3 (Actual)**: Automatización de "Documento Referencia" (Generación automática desde sersun-numsun). Ya no se requiere crearlo manualmente en Excel.
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
