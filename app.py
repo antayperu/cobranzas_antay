@@ -242,21 +242,20 @@ if file_ctas and file_cobranza and file_cartera:
                         # Total original (referencial)
                         total_orig_val = docs_cli['SALDO'].sum() 
 
-                        # --- DETALLE DE DOCUMENTOS (UX MEJORADA - TIPO TARJETA) ---
-                        # Propuesta Diseño:
+                        # --- DETALLE DE DOCUMENTOS (UX MEJORADA v1.8 - TIPO TARJETA) ---
+                        # Diseño Final:
                         # 📄 *F201-00003200*
-                        # 📅 Venc: 13/11/25   💰 *S/ -0.36*
+                        # 📅 Emisión: 10/11/25 | Venc: 13/11/25
                         # ℹ️ Imp: S/ 2,478.00 | Detr: S/ 297.36 (Pendiente)
-                        # ────────────────
+                        # 📉 Saldo: *S/ -0.36*
+                        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                         docs_lines = []
                         for _, doc in docs_cli.iterrows():
                             saldo_doc_real = doc['SALDO REAL']
                             
-                            # LISTAR TODOS LOS DOCUMENTOS (Positivos, Negativos, Cero)
-                            
                             # Preparar valores
                             comprobante = doc['COMPROBANTE']
-                            # emis = pd.to_datetime(doc['FECH EMIS']).strftime('%d/%m/%y') # Opcional si carga mucho
+                            emis = pd.to_datetime(doc['FECH EMIS']).strftime('%d/%m/%Y')
                             venc = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m/%Y')
                             
                             # Moneda Símbolo
@@ -284,9 +283,10 @@ if file_ctas and file_cobranza and file_cartera:
                             # Construir Bloque
                             block = (
                                 f"📄 *{comprobante}*\n"
-                                f"📅 Venc: {venc}   💰 *{saldo_fmt}*\n"
+                                f"📅 Emis: {emis} | Venc: {venc}\n"
                                 f"ℹ️ Imp: {monto_emit}{det_info}\n"
-                                "────────────────"
+                                f"📉 Saldo: *{saldo_fmt}*\n"
+                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             )
                             docs_lines.append(block)
                         
