@@ -1,0 +1,269 @@
+import pandas as pd
+import numpy as np
+
+def format_phone(phone):
+    """
+    Formatea el teléfono al estándar +51XXXXXXXXX.
+    Elimina espacios, guiones y paréntesis.
+    Si es NaN o vacío, devuelve "".
+    """
+    if pd.isna(phone) or phone == "":
+        return ""
+    
+    # Convertir a string y limpiar caracteres no numéricos
+    p = str(phone).strip()
+    p = ''.join(filter(str.isdigit, p))
+    
+    if not p:
+        return ""
+    
+    # Si ya empieza con 51 y tiene longitud correcta (11 dígitos: 51 + 9 dígitos)
+    if p.startswith("51") and len(p) == 11:
+        return "+" + p
+    
+    # Si es un celular de 9 dígitos, agregar +51
+    if len(p) == 9:
+        return "+51" + p
+        
+    # Otros casos (fijos o mal formados), devolver limpio con +51 si parece razonable, o dejar como está si es raro
+    # Regla simple solicitada: +51 + X
+    if not p.startswith("51"):
+        return "+51" + p
+    
+    return "+" + p
+
+def format_client_code(code):
+    """
+    Formatea el código de cliente a 6 dígitos con ceros a la izquierda.
+    """
+    if pd.isna(code):
+        return "000000"
+    try:
+        return str(int(float(code))).zfill(6)
+    except:
+        return str(code).zfill(6)
+
+def load_data(file_ctas, file_cartera, file_cobranza):
+    """
+    Carga los 3 DataFrames desde los archivos subidos.
+    Maneja excepciones de carga.
+    """
+    try:
+        df_ctas = pd.read_excel(file_ctas)
+        df_cartera = pd.read_excel(file_cartera)
+        df_cobranza = pd.read_excel(file_cobranza)
+        return df_ctas, df_cartera, df_cobranza, None
+    except Exception as e:
+        return None, None, None, str(e)
+
+def process_data(df_ctas, df_cartera, df_cobranza):
+    """
+    Aplica la lógica de negocio para fusionar y calcular campos.
+    """
+    # 1. Estandarizar claves de cruce
+    # CtasxCobrar: codcli
+    # Cartera: codigo_cliente
+    
+    # Asegurar tipos string para cruce
+    if 'codcli' in df_ctas.columns:
+        df_ctas['codcli_key'] = df_ctas['codcli'].apply(format_client_code)
+    else:
+        raise ValueError("Columna 'codcli' no encontrada en CtasxCobrar")
+
+    # Buscar columna en Cartera (codigo_cliente o codcli)
+    col_cartera_key = 'codigo_cliente'
+    if 'codcli' in df_cartera.columns:
+        col_cartera_key = 'codcli'
+    elif 'codigo_cliente' not in df_cartera.columns:
+        raise ValueError("Columna 'codigo_cliente' no encontrada en Cartera")
+        
+    df_cartera['codcli_key'] = df_cartera[col_cartera_key].apply(format_client_code)
+    
+    # 2. Cruce Ctas con Cartera (Left Join para mantener todas las cuentas)
+    # Traer telefono
+    if 'telefono' not in df_cartera.columns:
+        df_cartera['telefono'] = ""
+        
+    df_merged = pd.merge(
+        df_ctas, 
+        df_cartera[['codcli_key', 'telefono']], 
+        on='codcli_key', 
+        how='left'
+    )
+    
+    # Formatear teléfono
+    df_merged['TELÉFONO'] = df_merged['telefono'].apply(format_phone)
+    
+    # 3. Construir Comprobante SUNAT (Relación con Cobranza)
+    # Regla: Preferir Ctas["Documento Referencia"], si no sersun + "-" + numsun (padding 8)
+    def clean_numsun(val):
+        try:
+            return str(int(float(val))).zfill(8)
+        except:
+            return str(val).zfill(8)
+
+    def build_comprobante(row):
+        doc_ref = row.get("Documento Referencia", "")
+        if pd.notna(doc_ref) and str(doc_ref).strip() != "":
+            return str(doc_ref).strip()
+        
+        sersun = str(row.get("sersun", "")).strip()
+        numsun = clean_numsun(row.get("numsun", ""))
+        return f"{sersun}-{numsun}"
+
+    df_merged['COMPROBANTE'] = df_merged.apply(build_comprobante, axis=1)
+    
+    # 4. Calcular Detracción y Estado (Cruce con Cobranza)
+    # En Cobranza, clave es 'numsun' (formato Fxxx-xxxxxxxx)
+    # Y filtrar solo pagos DT
+    
+    if 'numsun' not in df_cobranza.columns:
+         # Intentar normalizar si se llama diferente, pero prompt dice numsun
+         pass
+    
+    # Preparar tabla de Cobranzas DT
+    # Filtrar solo 'DT'
+    if 'forpag' in df_cobranza.columns:
+        df_dt = df_cobranza[df_cobranza['forpag'] == 'DT'].copy()
+    else:
+        df_dt = pd.DataFrame() # Si no hay columna forpag, no hay DTs
+        
+    # Agrupar por numsun para evitar duplicados si hubo pagos parciales DT (aunque raro en detracción)
+    # Regla: "Si SÍ existe registro DT -> mostrar cadena legible"
+    # Tomamos el último pago DT si hubiera varios
+    
+    if not df_dt.empty:
+        # Asegurar formato de clave en Cobranza
+        df_dt['numsun_key'] = df_dt['numsun'].astype(str).str.strip()
+        
+        # Crear texto formateado
+        # Código de banco: {codbco} | Banco: {nombco} | Fecha de pago: {fecpro} | Doc: {mondoc} | Pag: {monpag}
+        def format_dt_info(row):
+            fec = pd.to_datetime(row.get('fecpro', '')).strftime('%d/%m/%Y') if pd.notna(row.get('fecpro')) else ''
+            return (f"Código de banco: {row.get('codbco', '')} | "
+                    f"Banco: {row.get('nombco', '')} | "
+                    f"Fecha de pago: {fec} | "
+                    f"Doc: {row.get('mondoc', '')} | "
+                    f"Pag: {row.get('monpag', '')}")
+
+        df_dt['info_dt'] = df_dt.apply(format_dt_info, axis=1)
+        
+        # Deduplicar por numsun (tomar el más reciente si hay varios? O concatenar?)
+        # Asumiremos uno por documento para simplificar, o el último.
+        dt_lookup = df_dt.groupby('numsun_key')['info_dt'].first()
+    else:
+        dt_lookup = pd.Series(dtype='object')
+        
+    # 5. Cálculos Finales en Merged
+    
+    # Calculado (S/)
+    if "Calculado (S/)" not in df_merged.columns:
+        df_merged["Calculado (S/)"] = 0.0
+    
+    # Helper detracción
+    def calc_detraccion(monto):
+        try:
+            val = float(monto)
+            if val > 700.00:
+                return val * 0.12
+            return 0.0
+        except:
+            return 0.0
+
+    df_merged['DETRACCIÓN'] = df_merged["Calculado (S/)"].apply(calc_detraccion)
+    
+    # Estado Detracción
+    def get_estado_dt(row):
+        if row['DETRACCIÓN'] == 0:
+            return "No Aplica" # Opcional, o dejar en Pendiente/Pagado logic?
+            # Prompt dice: Si CALCULADO > 700 -> detracción.
+            # Regla Estado: Para cada comprobante... 
+            # Prompt no dice "solo si aplica detracción". 
+            # Pero implícitamente solo importa si hay detracción.
+            # Asumiremos: Si detracción > 0, evaluamos. Si no, "-"
+        
+        if row['DETRACCIÓN'] <= 0:
+            return "-"
+
+        comprobante = row['COMPROBANTE']
+        if comprobante in dt_lookup.index:
+            return dt_lookup[comprobante]
+        else:
+            return "Pendiente"
+
+    df_merged['ESTADO DETRACCION'] = df_merged.apply(get_estado_dt, axis=1)
+
+    # 6. Selección y Ordenamiento de Columnas Finales
+    # COD CLIENTE (6 dígitos, texto)
+    # EMPRESA (de nomcli)
+    # TELÉFONO (+51)
+    # FECH EMIS (de fecdoc)
+    # FECH VENC (de fecvct)
+    # COMPROBANTE (Documento Referencia)
+    # MONEDA (de codmnd)
+    # TIPO CAMBIO (de tipcam)
+    # MONT EMIT (de mododo)
+    # CALCULADO (S/)
+    # DETRACCIÓN
+    # ESTADO DETRACCION
+    # SALDO (de sldacl)
+    
+    df_merged['COD CLIENTE'] = df_merged['codcli_key']
+    df_merged['EMPRESA'] = df_merged['nomcli']
+    df_merged['FECH EMIS'] = pd.to_datetime(df_merged['fecdoc']).dt.date
+    df_merged['FECH VENC'] = pd.to_datetime(df_merged['fecvct']).dt.date
+    df_merged['MONEDA'] = df_merged['codmnd']
+    df_merged['TIPO CAMBIO'] = df_merged['tipcam']
+    df_merged['MONT EMIT'] = df_merged['mododo']
+    df_merged['SALDO'] = df_merged['sldacl']
+    
+    # Calculo de SALDO REAL
+    # Regla:
+    # Si ESTADO DETRACCION != "Pendiente" (es decir, ya se pagó/aplicó): Saldo Real = Saldo
+    # Si ESTADO DETRACCION == "Pendiente":
+    #    Si Moneda == 'SOL': Saldo Real = Saldo - Detracción
+    #    Si Moneda == 'USD': Saldo Real = Saldo - (Detracción / Tipo Cambio)
+    
+    def calc_saldo_real(row):
+        saldo = float(row.get('SALDO', 0.0))
+        detraccion = float(row.get('DETRACCIÓN', 0.0))
+        estado_dt = row.get('ESTADO DETRACCION', '')
+        moneda = str(row.get('MONEDA', '')).strip().upper()
+        tc = float(row.get('TIPO CAMBIO', 1.0))
+        
+        # Si no aplica detracción (ej. monto bajo), el saldo real es el saldo
+        if detraccion <= 0:
+            return saldo
+
+        # Si ya se aplicó la detracción (encontrado en cobranza), el saldo ya considera eso?
+        # El usuario dijo: "si en el archivo de cobranza ya se aplico la detracción... no debe afectar el saldo... significa que es un saldo real"
+        # "si no existira la aplicación... el saldo real... sera el monto del saldo menos el importe de la detracción"
+        
+        if estado_dt == "Pendiente":
+            # Restar la detracción
+            if moneda == 'US$': # Caso Dolares
+                 # Detraccion esta en soles, convertir a dolares para restar
+                 if tc > 0:
+                     deduccion_usd = detraccion / tc
+                     return saldo - deduccion_usd
+                 else:
+                     return saldo # Evitar div0
+            else:
+                # Caso Soles
+                return saldo - detraccion
+        else:
+            # Estado != Pendiente (Pagado, o info de banco) -> Saldo se mantiene
+            return saldo
+
+    df_merged['SALDO REAL'] = df_merged.apply(calc_saldo_real, axis=1)
+
+    final_cols = [
+        'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 'FECH EMIS', 'FECH VENC',
+        'COMPROBANTE', 'MONEDA', 'TIPO CAMBIO', 'MONT EMIT',
+        'Calculado (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'SALDO', 'SALDO REAL'
+    ]
+    
+    # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)
+    final_cols = [c for c in final_cols if c in df_merged.columns]
+    
+    return df_merged[final_cols]
