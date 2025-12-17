@@ -54,6 +54,7 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v3.3**: Ajustes de Copy (Totales explicados "S/ X (Y docs)", estados con palabras completas).
     - **v3.4**: Refinamiento Lógico de Datos (Filtro 'PAV' y Match Key robusto para Detracciones).
     - **v3.5**: Mejoras Finales (Columna 'TIPO PEDIDO' y nombre de archivo personalizado).
+    - **v4.0 (Experto)**: Tablero de Gerencia (Semaforización de Deuda, Antigüedad, Moneda Integrada y Orden Lógico).
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.

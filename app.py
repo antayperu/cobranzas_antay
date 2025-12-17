@@ -183,14 +183,67 @@ if st.session_state['data_ready']:
         st.markdown("<br>", unsafe_allow_html=True)
         
         # --- FIX INDICE DINAMICO (Empieza en 1) ---
-        df_display = df_filtered.copy()
+        # --- VIEW TRANSFORMATION (v4.0) ---
+        # Preparar dataframe para mostrar y exportar (sin columnas numéricas crudas, usando las formateadas)
+        
+        # 1. Definir columnas visibles y su orden experto
+        view_cols = [
+            'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+            'TIPO PEDIDO', 'COMPROBANTE', 
+            'FECH EMIS', 'FECH VENC',
+            'DÍAS MORA', 'ESTADO DEUDA', # Critical Analysis
+            'MONEDA', 
+            'MONT EMIT_DISPLAY', 
+            'DETRACCIÓN_DISPLAY', 'ESTADO DETRACCION',
+            'AMORTIZACIONES',
+            'SALDO_DISPLAY', 
+            'SALDO REAL_DISPLAY', # Key Result (Moved here)
+            'MATCH_KEY'
+        ]
+        
+        # Filtrar solo las que existan (por si acaso)
+        view_cols = [c for c in view_cols if c in df_filtered.columns]
+        
+        df_display = df_filtered[view_cols].copy()
+        
+        # 2. Renombrar las columnas _DISPLAY a sus nombres limpios
+        rename_map = {
+            'MONT EMIT_DISPLAY': 'MONT EMIT',
+            'SALDO_DISPLAY': 'SALDO',
+            'DETRACCIÓN_DISPLAY': 'DETRACCIÓN',
+            'SALDO REAL_DISPLAY': 'SALDO REAL'
+        }
+        df_display.rename(columns=rename_map, inplace=True)
+        
+        # 3. Fix Indices
         df_display.reset_index(drop=True, inplace=True)
         df_display.index = df_display.index + 1
-        st.dataframe(df_display, use_container_width=True)
+        
+        # 4. Mostrar DataFrame con Styling (Semaforo)
+        # Resaltar filas? O columnas? Streamlit permite resaltar celdas.
+        # Aplicamos estilo a la columna ESTADO DEUDA
+        
+        def highlight_status(val):
+            color = ''
+            if 'Por Vencer' in str(val):
+                color = 'background-color: #d4edda; color: #155724' # Verde suave
+            elif 'Preventiva' in str(val):
+                color = 'background-color: #fff3cd; color: #856404' # Amarillo suave
+            elif 'Administrativa' in str(val):
+                color = 'background-color: #ffeeba; color: #856404' # Naranja suave (usamos amarillo oscuro)
+            elif 'Pre-Legal' in str(val):
+                color = 'background-color: #f8d7da; color: #721c24' # Rojo suave
+            return color
+
+        st.dataframe(
+            df_display.style.map(highlight_status, subset=['ESTADO DEUDA']),
+            use_container_width=True
+        )
         
         # --- PASO 3: EXPORTAR ---
         st.subheader("3. Exportar Reporte 📥")
-        excel_data = generate_excel(df_filtered)
+        # Generar Excel usando la vista limpia (Strings formateados)
+        excel_data = generate_excel(df_display)
         st.download_button(
             label="Descargar Excel Estilizado",
             data=excel_data,

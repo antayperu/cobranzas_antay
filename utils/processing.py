@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from datetime import date
 
 def format_phone(phone):
     """
@@ -338,12 +339,82 @@ def process_data(df_ctas, df_cartera, df_cobranza):
 
     df_merged['SALDO REAL'] = df_merged.apply(calc_saldo_real, axis=1)
 
+    # --- EXPERT REFINEMENTS v4.0: Aging & Formatting ---
+    
+    # 1. DÍAS MORA & ESTADO (Semaforización)
+    today = date.today()
+    
+    def calc_aging(row):
+        try:
+            venc = row['FECH VENC']
+            if pd.isna(venc): return 0, "Indeterminado"
+            
+            # Ensure venc is date object
+            if isinstance(venc, pd.Timestamp): venc = venc.date()
+            
+            delta = (today - venc).days
+            
+            # Estado (Semáforo Textual)
+            if delta < 0:
+                status = "🟢 Por Vencer"
+            elif delta <= 8:
+                status = "🟡 Gestión Preventiva"
+            elif delta <= 30:
+                status = "🟠 Gestión Administrativa"
+            else:
+                status = "🔴 Gestión Pre-Legal"
+                
+            return delta, status
+        except:
+            return 0, "Error"
+
+    # Apply aging
+    aging_results = df_merged.apply(calc_aging, axis=1, result_type='expand')
+    df_merged['DÍAS MORA'] = aging_results[0]
+    df_merged['ESTADO DEUDA'] = aging_results[1]
+
+    # 2. Formato Moneda Integrado (Pegar símbolo al valor)
+    # Columnas a formatear: MONT EMIT, DETRACCIÓN, SALDO, SALDO REAL
+    
+    def format_currency_cell(row, col_name):
+        try:
+            amount = float(row.get(col_name, 0))
+            if amount == 0: return "-" # Limpieza visual
+            
+            # Obtener símbolo
+            mon = str(row.get('MONEDA', '')).strip().upper()
+            symbol = "S/" if mon.startswith('S') else "$"
+            
+            return f"{symbol} {amount:,.2f}"
+        except:
+            return str(row.get(col_name, ""))
+
+    # Crear columnas formateadas para Display (Las numéricas se quedan para cálculos si hicieran falta)
+    # Sobreescribimos las columnas para el reporte final directo? 
+    # El usuario pidió "pegar como parte de la celda". 
+    # Si sobreescribimos, perdemos la capacidad de sumar en Excel numéricamente fácil? 
+    # El usuario dijo "el cuadro resultante", implicando lo que ve.
+    # Para Excel export, mejor tener strings visuales. 
+    
+    cols_to_format = ['MONT EMIT', 'DETRACCIÓN', 'SALDO', 'SALDO REAL']
+    for col in cols_to_format:
+        # Crear columna _DISPLAY para visualización, mantener original numérica para cálculos
+        display_col = f"{col}_DISPLAY"
+        df_merged[display_col] = df_merged.apply(lambda r: format_currency_cell(r, col), axis=1)
+
     final_cols = [
-        'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 'FECH EMIS', 'FECH VENC',
-        'COMPROBANTE', 'MONEDA', 'TIPO CAMBIO', 'MONT EMIT',
-        'Importe Referencial (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'AMORTIZACIONES', 'SALDO', 'SALDO REAL',
-        'TIPO PEDIDO', # v3.5
-        'MATCH_KEY' # Exposed for debugging
+        'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+        'TIPO PEDIDO', 
+        'COMPROBANTE', 'FECH EMIS', 'FECH VENC',
+        'DÍAS MORA', 'ESTADO DEUDA',
+        'MONEDA',
+        'MONT EMIT', 'MONT EMIT_DISPLAY',
+        'SALDO REAL', 'SALDO REAL_DISPLAY',
+        'SALDO', 'SALDO_DISPLAY',
+        'DETRACCIÓN', 'DETRACCIÓN_DISPLAY',
+        'ESTADO DETRACCION', 
+        'AMORTIZACIONES',
+        'MATCH_KEY'
     ]
     
     # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)
