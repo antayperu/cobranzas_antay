@@ -26,5 +26,14 @@
         "show_analysis": false,
         "show_sales": false
     },
-    "logo_path": "C:\\Users\\corte\\OneDrive\\CamiloOrtegaFR\\02_AntayPeru\\2.3_Divisiones\\3.4_Consultoria_Antay\\Recursos_Tecnicos\\Python\\ReporteCobranzas\\assets\\logo_dacta_processed.png"
+    "logo_path": "C:\\Users\\corte\\OneDrive\\CamiloOrtegaFR\\02_AntayPeru\\2.3_Divisiones\\3.4_Consultoria_Antay\\Recursos_Tecnicos\\Python\\ReporteCobranzas\\assets\\logo_dacta_processed.png",
+    "qa_config": {
+        "enabled": true,
+        "mode": "ALL",
+        "recipients": [
+            "cortega@antayperu.com",
+            "angelacamachoq@gmail.com"
+        ],
+        "allowlist_domains": []
+    }
 }
