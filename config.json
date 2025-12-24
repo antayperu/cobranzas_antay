@@ -1,5 +1,5 @@
 {
-    "company_name": "DACTA SOCIEDAD ANONIMA CERRADA - DACTA S.A.C.",
+    "company_name": "DACTA S.A.C.",
     "company_ruc": "20375779448",
     "phone_contact": "+51 998 080 797",
     "primary_color": "#2e4af6",
@@ -31,17 +31,14 @@
         "enabled": true,
         "mode": "ALL",
         "recipients": [
-            "cortega@antayperu.com",
-            "cortegafuentesrivera@gmail.com",
-            "cortega28@hotmail.com",
+            "cortega28@hotmail.com"
+        ],
+        "cc_recipients": [
             "angelacamachoq@gmail.com"
+        ],
+        "bcc_recipients": [
+            "cortega@antayperu.com"
         ],
         "allowlist_domains": []
-    },
-    "internal_copies": {
-        "cc_list": [
-            "angelacamachoq@gmail.com"
-        ],
-        "bcc_list": []
     }
 }
