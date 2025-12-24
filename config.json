@@ -37,5 +37,11 @@
             "angelacamachoq@gmail.com"
         ],
         "allowlist_domains": []
+    },
+    "internal_copies": {
+        "cc_list": [
+            "angelacamachoq@gmail.com"
+        ],
+        "bcc_list": []
     }
 }
